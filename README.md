@@ -49,6 +49,22 @@ The current frontend remains a browser-camera test harness. CSI/Picamera2 captur
 and the team's final main-branch frontend are separate integration work; they
 can submit JPEGs to the same POST `/api/vision/analyze` contract.
 
+### Conservative river-scene filtering
+
+Detection now runs on the full image and four overlapping crops for images at
+least 480 pixels on the shorter side. Cross-class suppression removes duplicate
+boxes. Set `WASTE_TILES=0` on slower hardware for full-image-only inference.
+Default paper confidence is 0.70 (`WASTE_PAPER_CONFIDENCE`) and maximum object area
+is 18% of the image (`WASTE_MAX_AREA`). Predictions spanning nearly all of a
+view, or truncated at internal crop boundaries, are rejected. These rules target
+scene-sized paper false positives but can miss large genuine litter. They do not
+make the model a water classifier. No-detection results must not imply clean water.
+
+Local checks: the existing bottle example retains its plastic detection. Five
+passes increase CPU latency; no Raspberry Pi benchmark or labelled river accuracy
+measurement has been performed. Run geometry regression checks with
+`python -m unittest discover -s backend -p test_waste_detector.py`.
+
 A real-time stormwater pollution monitoring prototype. The system monitors water quality at stormwater drain outlets during first-flush rain events, detecting elevated turbidity and conductivity and triggering a physical diverter response when pollution thresholds are exceeded.
 
 ## Architecture

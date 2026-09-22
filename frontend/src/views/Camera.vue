@@ -207,6 +207,7 @@ export default {
 
     riskLabel() {
       if (!this.result) return 'Awaiting feed'
+      if (this.result.assessment === 'no_confirmed_litter') return 'No confirmed litter'
       if (this.result.score >= 68) return 'High'
       if (this.result.score >= 38) return 'Moderate'
       return 'Low'
@@ -280,6 +281,7 @@ export default {
       if (!this.cameraActive || !video || video.readyState < 2 || this.analysing) return
 
       const canvas = this.$refs.captureCanvas
+      this.analysing = true
       const maxWidth = 1280
       const scale = Math.min(1, maxWidth / video.videoWidth)
       canvas.width = Math.round(video.videoWidth * scale)
@@ -287,6 +289,7 @@ export default {
       canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.86))
       if (blob) await this.sendForAnalysis(blob, 'camera-frame.jpg')
+      else this.analysing = false
     },
 
     async handleFileUpload(event) {

@@ -250,6 +250,8 @@ async def analyze_image(
             'source': model_path().stem, 'method': 'trained_yolov8_waste_detection',
             'context': context, 'detectionCount': len(detections), 'detections': detections,
             'inferenceMs': elapsed, 'litterCount': len(litter),
+            'assessment': 'visible_litter_detected' if litter else 'no_confirmed_litter',
+            'screeningNote': 'Conservative object filtering; large real objects may be excluded. No detections is not proof of clean water.',
             'factors': {'turbidity': None, 'discoloration': None, 'quality': None, 'debris': min(1., len(litter)/5)},
             'limitations': 'Visible waste detection only. No water segmentation, chemical analysis or water-safety determination. Organic/other detections do not increase the litter index.',
         }
