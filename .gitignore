@@ -17,6 +17,7 @@ coverage
 *.timestamp-*-*.mjs
 
 # python
+backend/weights/
 */venv/
 */__pycache__/
 *.pyc

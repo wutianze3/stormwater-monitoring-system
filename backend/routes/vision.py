@@ -9,6 +9,8 @@ import os
 import cv2
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 import numpy as np
+from starlette.concurrency import run_in_threadpool
+from waste_detector import detect, model_path
 
 
 router = APIRouter(prefix="/api/vision", tags=["vision"])
@@ -198,12 +200,14 @@ def scene_features(
 
 @router.get("/health")
 def vision_health():
+    learned = os.getenv('VISION_ENGINE', 'yolo') == 'yolo'
     return {
-        "status": "ready",
-        "name": "OpenCV threshold screening",
+        "status": "ready" if not learned or model_path().is_file() else "model_missing",
+        "name": "YOLOv8 waste detection" if os.getenv('VISION_ENGINE', 'yolo') == 'yolo' else "OpenCV threshold screening",
+        "modelAvailable": model_path().is_file(),
         "runtime": f"OpenCV {cv2.__version__}",
-        "maxAnalysisSide": MAX_ANALYSIS_SIDE,
-        "maxDetections": MAX_DETECTIONS,
+        "maxAnalysisSide": 640 if learned else MAX_ANALYSIS_SIDE,
+        "maxDetections": 30 if learned else MAX_DETECTIONS,
     }
 
 
@@ -218,16 +222,37 @@ async def analyze_image(
             detail="Only JPEG, PNG, and WEBP images are supported",
         )
 
-    raw = await image.read()
+    raw = await image.read(MAX_UPLOAD_BYTES + 1)
     if len(raw) > MAX_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413, detail="Image exceeds the 12 MB limit"
         )
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image")
     frame = cv2.imdecode(
         np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR
     )
     if frame is None:
         raise HTTPException(status_code=400, detail="Invalid image")
+
+    engine = os.getenv('VISION_ENGINE', 'yolo')
+    if engine == 'yolo':
+        try:
+            detections, elapsed = await run_in_threadpool(detect, frame)
+        except Exception as exc:
+            raise HTTPException(503, 'Waste model unavailable. Install requirements and run backend/download_waste_model.py, then restart the backend.') from exc
+        # A heuristic visible-litter index, not a measured contamination level.
+        litter = [d for d in detections if d['label'] in {'paper', 'plastic', 'metal'}]
+        coverage = sum(d['areaRatio'] for d in litter)
+        score = round(min(95, len(litter) * 12 + min(coverage, 0.5) * 100))
+        return {
+            'score': score, 'confidence': round(max((d['confidence'] for d in detections), default=0)*100),
+            'source': model_path().stem, 'method': 'trained_yolov8_waste_detection',
+            'context': context, 'detectionCount': len(detections), 'detections': detections,
+            'inferenceMs': elapsed, 'litterCount': len(litter),
+            'factors': {'turbidity': None, 'discoloration': None, 'quality': None, 'debris': min(1., len(litter)/5)},
+            'limitations': 'Visible waste detection only. No water segmentation, chemical analysis or water-safety determination. Organic/other detections do not increase the litter index.',
+        }
 
     original_height, original_width = frame.shape[:2]
     analysis_frame, scale = resize_for_analysis(frame)

@@ -31,7 +31,7 @@
               @loadedmetadata="handleVideoReady"
             />
             <canvas
-              v-show="cameraActive"
+              v-show="cameraActive || uploadedPreview"
               ref="overlay"
               class="detection-overlay"
             />
@@ -48,7 +48,7 @@
               <v-icon size="80" color="grey-darken-1">mdi-camera-off</v-icon>
               <div class="text-medium-emphasis mt-4">Camera is not running</div>
               <div class="text-caption text-medium-emphasis mt-1">
-                Start the camera or upload an image for OpenCV screening
+                Start the camera or upload an image for waste detection
               </div>
             </div>
 
@@ -116,7 +116,7 @@
           <v-divider />
           <v-card-text>
             <div class="mb-4">
-              <div class="text-medium-emphasis text-caption mb-1">Visual Risk Score</div>
+              <div class="text-medium-emphasis text-caption mb-1">Visible Litter Index (not water quality)</div>
               <div class="d-flex align-center justify-space-between">
                 <span class="text-h4 font-weight-bold">{{ result?.score ?? '—' }}</span>
                 <v-chip size="small" :color="riskColor" variant="tonal">
@@ -142,7 +142,7 @@
             <div class="mb-4">
               <div class="text-medium-emphasis text-caption mb-1">Visual Anomalies</div>
               <div class="d-flex align-center justify-space-between">
-                <span class="text-medium-emphasis text-body-2">Contour regions detected</span>
+                <span class="text-medium-emphasis text-body-2">Detected objects</span>
                 <v-chip size="small" :color="result?.detectionCount ? 'warning' : 'success'" variant="tonal">
                   {{ result ? result.detectionCount : 'Awaiting feed' }}
                 </v-chip>
@@ -155,20 +155,20 @@
             <v-list bg-color="transparent" density="compact">
               <v-list-item
                 prepend-icon="mdi-gauge"
-                title="Screening confidence"
+                title="Highest object confidence (not accuracy)"
                 :subtitle="result ? `${result.confidence}%` : 'Awaiting analysis'"
                 density="compact"
               />
               <v-list-item
                 prepend-icon="mdi-image-filter-center-focus"
                 title="Detection method"
-                subtitle="OpenCV colour thresholds and contours"
+                :subtitle="result?.source || 'YOLOv8 waste detection'"
                 density="compact"
               />
             </v-list>
 
             <v-alert type="info" variant="tonal" class="mt-4" density="compact">
-              Visual screening only. Results do not establish water safety.
+              Visible waste screening only. Organic objects and unknown objects do not increase the litter index. Results do not establish water safety.
             </v-alert>
           </v-card-text>
         </v-card>
@@ -226,6 +226,7 @@ export default {
   methods: {
     async startCamera() {
       this.errorMessage = ''
+      this.result = null
       this.releaseUploadedPreview()
       if (!navigator.mediaDevices?.getUserMedia) {
         this.errorMessage = 'Camera access is not supported by this browser.'
@@ -297,6 +298,7 @@ export default {
         return
       }
       this.stopCamera()
+      this.result = null
       this.releaseUploadedPreview()
       this.uploadedPreview = URL.createObjectURL(file)
       await this.sendForAnalysis(file, file.name)
@@ -312,6 +314,7 @@ export default {
         const response = await fetch(`${API_BASE}/api/vision/analyze`, {
           method: 'POST',
           body,
+          signal: AbortSignal.timeout(30000),
         })
         if (!response.ok) {
           const failure = await response.json().catch(() => ({}))
@@ -321,7 +324,9 @@ export default {
         await this.$nextTick()
         this.drawDetections()
       } catch (error) {
-        this.errorMessage = `OpenCV analysis failed: ${error.message}`
+        this.result = null
+        this.clearOverlay()
+        this.errorMessage = `Waste analysis failed: ${error.message}`
         console.error('vision analysis failed', error)
       } finally {
         this.analysing = false
@@ -343,12 +348,14 @@ export default {
       context.scale(dpr, dpr)
       context.clearRect(0, 0, width, height)
 
-      if (!this.cameraActive || !this.result?.detections?.length) return
-      const video = this.$refs.video
-      if (!video?.videoWidth || !video?.videoHeight) return
-      const imageScale = Math.min(width / video.videoWidth, height / video.videoHeight)
-      const shownWidth = video.videoWidth * imageScale
-      const shownHeight = video.videoHeight * imageScale
+      if (!this.result?.detections?.length) return
+      const source = this.cameraActive ? this.$refs.video : this.$refs.uploadedImage
+      const sourceWidth = source?.videoWidth || source?.naturalWidth
+      const sourceHeight = source?.videoHeight || source?.naturalHeight
+      if (!sourceWidth || !sourceHeight) return
+      const imageScale = Math.min(width / sourceWidth, height / sourceHeight)
+      const shownWidth = sourceWidth * imageScale
+      const shownHeight = sourceHeight * imageScale
       const offsetX = (width - shownWidth) / 2
       const offsetY = (height - shownHeight) / 2
 
@@ -382,7 +389,7 @@ export default {
     },
 
     factorPercent(value) {
-      return Number.isFinite(value) ? `${Math.round(value * 100)}%` : 'Awaiting feed'
+      return Number.isFinite(value) ? `${Math.round(value * 100)}%` : 'Not measured'
     },
 
     factorColor(value) {
@@ -419,6 +426,7 @@ export default {
 }
 
 .detection-overlay {
+  z-index: 1;
   position: absolute;
   inset: 0;
   pointer-events: none;
