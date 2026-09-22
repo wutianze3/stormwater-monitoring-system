@@ -55,6 +55,8 @@ Open `http://localhost:5173` in your browser.
 The vision endpoint uses lightweight deterministic OpenCV threshold and contour
 screening for Raspberry Pi deployment. It is not a trained ML model and cannot
 determine whether water is safe or identify dissolved or microbial pollution.
+The Vue Camera view can open the browser camera, analyse a frame every 2.5
+seconds, draw returned anomaly boxes, or analyse an uploaded image.
 
 ## Production
 
