@@ -48,7 +48,13 @@ Open `http://localhost:5173` in your browser.
 | GET | `/api/status` | Current sensor snapshot |
 | GET | `/api/readings` | Historical readings from SQLite |
 | GET | `/api/events` | Threshold breach event log |
+| GET | `/api/vision/health` | OpenCV service status |
+| POST | `/api/vision/analyze` | Analyse a JPEG, PNG, or WEBP image (`image` multipart field) |
 | WS | `/ws/live` | Live sensor stream at 2s intervals |
+
+The vision endpoint uses lightweight deterministic OpenCV threshold and contour
+screening for Raspberry Pi deployment. It is not a trained ML model and cannot
+determine whether water is safe or identify dissolved or microbial pollution.
 
 ## Production
 

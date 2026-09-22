@@ -6,6 +6,7 @@ from database import init_db
 from routes.sensors import router as sensors_router
 from routes.events import router as events_router
 from routes.websocket import router as websocket_router, sensor_loop
+from routes.vision import router as vision_router
 
 app = FastAPI(title="Stormwater Monitoring System")
 
@@ -22,6 +23,7 @@ app.add_middleware(
 app.include_router(sensors_router)
 app.include_router(events_router)
 app.include_router(websocket_router)
+app.include_router(vision_router)
 
 init_db()
 
